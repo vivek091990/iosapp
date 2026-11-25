@@ -22,7 +22,7 @@ The backend turns a photo into a one-tap hairline preview:
 
 ### Requirements
 
-- Python 3.10+
+- Python 3.10 or newer (google-genai does not install on 3.9; macOS ships 3.9, so use Homebrew or python.org Python)
 - On Linux servers, MediaPipe needs `libegl1` and `libgles2` (`apt-get install libegl1 libgles2`).
 - At least one model API key (see below). MediaPipe model files download to `backend/models/` on first use.
 
