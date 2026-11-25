@@ -70,6 +70,16 @@ python scripts/bakeoff.py ~/hairline-photos --blind
 
 It writes `bakeoff-out/<time>/index.html` with the original and each model's result side by side, a summary per model (success rate, median seconds, face drift) and 1 to 5 star ratings you can export. `--presets` defaults to `auto`. `--blind` hides model names (the key is in `results.json`) so people can rate realism without bias.
 
+### Training data for a self-hosted model
+
+`backend/training/` turns consented photos of people with full hairlines into training pairs for fine-tuning an open edit model (Qwen-Image-Edit or FLUX.2 klein). Pairs are made in reverse: each real photo is the "after", and a synthetic receded copy is the "before", so the model always learns toward real hair. The receding is classical image processing (M-shaped, deeper at the temples, thinned edge, forehead skin continued upward); no Gemini or other generative output is used.
+
+```bash
+python -m training.build_dataset ~/Documents/hairline-training out/dataset --variants 2
+```
+
+Put one subfolder per person (`person_001/`, ...) so the train/test split never puts the same person in both. The output uses the control / target / caption layout LoRA trainers read, plus `manifest.jsonl`, `skipped.csv` (photos that can't be used and why: no visible hairline, bangs over the forehead, too little hair) and `review.html` to eyeball pairs before training. It works best on short-to-medium hair; long hair swept over the forehead gives weaker pairs, so drop those after review.
+
 ### Tests
 
 ```bash
