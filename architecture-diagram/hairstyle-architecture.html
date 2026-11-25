@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HairStyle Architecture</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one wide two-lane system map (phone | wire | server), then the request as a timed sequence, then the caveats. */
+:root {
+  --bg: #f5f6fa;
+  --surface: #ffffff;
+  --fg: #1b1f2e;
+  --muted: #5d6478;
+  --line: #c9cedc;
+  --client: #4053c9;
+  --client-tint: #eceffd;
+  --server: #0b8064;
+  --server-tint: #e3f4ee;
+  --wire: #c2410c;
+  --warn: #a15c00;
+  --warn-tint: #fff4e0;
+  --font-display: "Sora", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11131b; --surface: #191c27; --fg: #e7e9f2; --muted: #9aa1b6; --line: #343a4d;
+    --client: #8f9cff; --client-tint: #1f2440; --server: #4fd1a8; --server-tint: #13302a;
+    --wire: #fb923c; --warn: #f5b04a; --warn-tint: #2e2413; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11131b; --surface: #191c27; --fg: #e7e9f2; --muted: #9aa1b6; --line: #343a4d;
+  --client: #8f9cff; --client-tint: #1f2440; --server: #4fd1a8; --server-tint: #13302a;
+  --wire: #fb923c; --warn: #f5b04a; --warn-tint: #2e2413; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 16px/1.6 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 56px; }
+header { display: grid; gap: 12px; max-width: 760px; }
+.eyebrow { font: 500 12px/1 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 700 clamp(30px, 5vw, 46px)/1.1 var(--font-display); margin: 0; letter-spacing: -.02em; text-wrap: balance; }
+h2 { font: 600 24px/1.2 var(--font-display); margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+p { margin: 0; max-width: 68ch; }
+.lede { font-size: 18px; color: var(--muted); }
+.lede b { color: var(--fg); font-weight: 600; }
+code, .mono { font-family: var(--font-mono); font-size: .88em; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.chip { font: 500 12px/1 var(--font-mono); padding: 7px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); }
+.chip.c { color: var(--client); border-color: color-mix(in srgb, var(--client) 40%, transparent); }
+.chip.s { color: var(--server); border-color: color-mix(in srgb, var(--server) 40%, transparent); }
+.chip.w { color: var(--wire); border-color: color-mix(in srgb, var(--wire) 40%, transparent); }
+
+section { display: grid; gap: 18px; }
+figure { margin: 0; display: grid; gap: 12px; }
+.canvas { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; overflow-x: auto; }
+.canvas svg { display: block; width: 100%; min-width: 900px; height: auto; }
+figcaption { font-size: 14px; color: var(--muted); max-width: 80ch; }
+
+/* SVG vocabulary */
+.lane-c { fill: var(--client-tint); stroke: none; }
+.lane-s { fill: var(--server-tint); stroke: none; }
+.lane-title { font: 600 13px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; }
+.lane-title.c { fill: var(--client); } .lane-title.s { fill: var(--server); } .lane-title.w { fill: var(--wire); }
+.box { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+.box.c { stroke: color-mix(in srgb, var(--client) 55%, var(--line)); }
+.box.s { stroke: color-mix(in srgb, var(--server) 55%, var(--line)); }
+.box.ghost { fill: none; stroke-dasharray: 4 4; }
+.pill { fill: var(--client-tint); stroke: none; }
+.pill.btn { fill: var(--client); }
+.t { fill: var(--fg); font: 600 14px var(--font-body); }
+.t.big { font: 600 16px var(--font-display); }
+.t.inv { fill: var(--bg); }
+.sub { fill: var(--muted); font: 400 12px var(--font-mono); }
+.sm { fill: var(--fg); font: 500 12.5px var(--font-body); }
+.var { fill: var(--fg); font: 400 12px var(--font-mono); }
+.var.k { fill: var(--client); }
+.lbl { fill: var(--muted); font: 500 11.5px var(--font-mono); }
+.lbl.w { fill: var(--wire); }
+.lbl.s { fill: var(--server); }
+.ar { fill: none; stroke: var(--muted); stroke-width: 1.4; }
+.ar.dash { stroke-dasharray: 5 4; }
+.ar.wire { stroke: var(--wire); stroke-width: 2.2; }
+.ar.srv { stroke: var(--server); stroke-width: 1.6; }
+.head { fill: var(--muted); } .head.w { fill: var(--wire); } .head.s { fill: var(--server); }
+.dot { fill: var(--wire); }
+
+/* Sequence */
+.seq { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: s; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.seq li { display: grid; grid-template-columns: 44px 150px 1fr; gap: 16px; align-items: baseline; padding: 14px 18px; border-top: 1px solid var(--line); counter-increment: s; }
+.seq li:first-child { border-top: 0; }
+.seq li::before { content: counter(s, decimal-leading-zero); font: 500 13px var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.who { font: 600 12px/1.4 var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }
+.who.c { color: var(--client); } .who.s { color: var(--server); } .who.w { color: var(--wire); } .who.u { color: var(--muted); }
+.seq p { min-width: 0; }
+@media (max-width: 640px) {
+  .seq li { grid-template-columns: 32px 1fr; gap: 4px 12px; }
+  .seq li p { grid-column: 2; }
+}
+
+/* Files + caveats */
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.panel h3 { margin: 0; font: 600 15px var(--font-display); display: flex; align-items: center; gap: 8px; }
+.panel h3 .sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.files { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.files li { display: grid; grid-template-columns: minmax(150px, auto) 1fr; gap: 12px; font-size: 14px; }
+.files code { color: var(--fg); }
+.files span { color: var(--muted); }
+@media (max-width: 480px) { .files li { grid-template-columns: 1fr; gap: 0; } }
+.caveats { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.caveats li { padding: 12px 14px; border-radius: 10px; background: var(--warn-tint); font-size: 14.5px; }
+.caveats b { color: var(--warn); font-weight: 600; display: block; }
+footer { font-size: 13px; color: var(--muted); }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">vivek091990/iosapp · main</div>
+    <h1>How HairStyle works</h1>
+    <p class="lede">One SwiftUI screen picks a photo, a <b>preset</b> and a <b>coverage</b> level, then sends them to a small FastAPI server. The server stamps a "HairStyle Preview" watermark on the photo, caches the result, and returns a PNG that the app shows in a before/after slider.</p>
+    <div class="chips">
+      <span class="chip c">SwiftUI · iOS 16 PhotosPicker</span>
+      <span class="chip w">HTTP multipart → PNG</span>
+      <span class="chip s">FastAPI · Pillow · uvicorn</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>The system on one page</h2>
+    <figure>
+      <div class="canvas">
+        <svg viewBox="0 0 1160 640" role="img" aria-label="Architecture: the SwiftUI ContentView holds all state and calls PreviewService, which posts a multipart request to the FastAPI /v1/preview endpoint; the server hashes the inputs, returns a cached PNG on a hit, or watermarks the image with Pillow on a miss, then returns image/png to the app.">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head"/></marker>
+            <marker id="ahw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head w"/></marker>
+            <marker id="ahs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head s"/></marker>
+          </defs>
+
+          <!-- lanes -->
+          <rect class="lane-c" x="16" y="16" width="568" height="608" rx="16"/>
+          <rect class="lane-s" x="760" y="16" width="384" height="608" rx="16"/>
+          <text class="lane-title c" x="40" y="48">iPhone app · SwiftUI</text>
+          <text class="lane-title w" x="672" y="48" text-anchor="middle">Network</text>
+          <text class="lane-title s" x="784" y="48">Backend · FastAPI</text>
+
+          <!-- ===== iOS ===== -->
+          <rect class="box c" x="40" y="72" width="200" height="48" rx="10"/>
+          <text class="t" x="56" y="93">HairStyleApp</text>
+          <text class="sub" x="56" y="111">@main · WindowGroup</text>
+          <path class="ar" d="M140 120 V150" marker-end="url(#ah)"/>
+          <text class="lbl" x="150" y="140">launches</text>
+
+          <!-- ContentView container -->
+          <rect class="box c" x="40" y="152" width="520" height="262" rx="12"/>
+          <text class="t big" x="56" y="178">ContentView</text>
+          <text class="sub" x="172" y="178">the only screen</text>
+
+          <!-- inputs -->
+          <rect class="pill" x="56" y="194" width="232" height="34" rx="8"/>
+          <text class="sm" x="70" y="215">PhotosPicker</text><text class="lbl" x="274" y="215" text-anchor="end">photo</text>
+          <rect class="pill" x="56" y="236" width="232" height="34" rx="8"/>
+          <text class="sm" x="70" y="257">Preset picker</text><text class="lbl" x="274" y="257" text-anchor="end">segmented</text>
+          <rect class="pill" x="56" y="278" width="232" height="34" rx="8"/>
+          <text class="sm" x="70" y="299">Coverage slider</text><text class="lbl" x="274" y="299" text-anchor="end">0 – 100</text>
+          <rect class="pill btn" x="56" y="320" width="232" height="34" rx="8"/>
+          <text class="t inv" x="172" y="342" text-anchor="middle">Preview (Free)</text>
+
+          <!-- state -->
+          <rect class="box" x="320" y="194" width="224" height="160" rx="10"/>
+          <text class="lbl" x="334" y="214">@State</text>
+          <text class="var k" x="334" y="236">selectedItem</text>
+          <text class="var k" x="334" y="254">originalImage</text>
+          <text class="var k" x="334" y="272">previewImage</text>
+          <text class="var" x="334" y="290">preset · coverage</text>
+          <text class="var" x="334" y="308">isLoading</text>
+          <text class="var" x="334" y="326">errorMessage</text>
+          <path class="ar" d="M288 253 H316" marker-end="url(#ah)"/>
+          
+
+          <!-- before/after -->
+          <rect class="box c" x="56" y="366" width="488" height="36" rx="8"/>
+          <text class="sm" x="70" y="389">BeforeAfterSlider</text>
+          <text class="lbl" x="200" y="389">masks preview over original · 320pt tall</text>
+          <path class="ar" d="M480 354 V362" marker-end="url(#ah)"/>
+
+          <!-- Config + Preset -->
+          <rect class="box c ghost" x="40" y="452" width="140" height="64" rx="10"/>
+          <text class="t" x="54" y="474">Config</text>
+          <text class="sub" x="54" y="492">apiBaseURL</text>
+          <text class="sub" x="54" y="507">localhost:8000</text>
+          <rect class="box c ghost" x="40" y="536" width="140" height="64" rx="10"/>
+          <text class="t" x="54" y="558">Preset</text>
+          <text class="sub" x="54" y="576">Crown · Hairline</text>
+          <text class="sub" x="54" y="591">· Part</text>
+          <path class="ar dash" d="M110 536 V526 H34 V253 H52" marker-end="url(#ah)"/>
+          <text class="lbl" x="22" y="430" transform="rotate(-90 22 430)">cases</text>
+          <path class="ar dash" d="M180 484 H210" marker-end="url(#ah)"/>
+
+          <!-- PreviewService -->
+          <rect class="box c" x="212" y="452" width="348" height="148" rx="12"/>
+          <text class="t big" x="228" y="478">PreviewService</text>
+          <text class="sub" x="356" y="478">.preview()</text>
+          <text class="var" x="228" y="506"><tspan class="lbl">1</tspan>  image.pngData()</text>
+          <text class="var" x="228" y="528"><tspan class="lbl">2</tspan>  MultipartFormDataBuilder</text>
+          <text class="var" x="228" y="550"><tspan class="lbl">3</tspan>  URLSession.shared.data(for:)</text>
+          <text class="var" x="228" y="572"><tspan class="lbl">4</tspan>  2xx? → UIImage(data:)</text>
+          <text class="lbl" x="228" y="590">else throws PreviewError</text>
+
+          <path class="ar" d="M252 414 V448" marker-end="url(#ah)"/>
+          <text class="lbl" x="262" y="432">submitPreview()</text>
+          <path class="ar" d="M500 450 V418" marker-end="url(#ah)"/>
+          <text class="lbl" x="490" y="432" text-anchor="end">previewImage</text>
+
+          <!-- ===== wire ===== -->
+          <path class="ar wire" d="M560 500 H640 V186 H776" marker-end="url(#ahw)"/>
+          <circle class="dot" cx="560" cy="500" r="4"/>
+          <text class="lbl w" x="652" y="230">POST</text>
+          <text class="lbl w" x="652" y="246">/v1/preview</text>
+          <text class="lbl" x="652" y="272">multipart</text>
+          <text class="lbl" x="652" y="288">file  photo.png</text>
+          <text class="lbl" x="652" y="304">preset</text>
+          <text class="lbl" x="652" y="320">coverage</text>
+
+          <path class="ar wire" d="M776 572 H564" marker-end="url(#ahw)"/>
+          <text class="lbl w" x="668" y="562" text-anchor="middle">200 · image/png</text>
+
+          <!-- ===== backend ===== -->
+          <rect class="box s" x="780" y="72" width="340" height="48" rx="10"/>
+          <text class="t" x="796" y="93">uvicorn · :8000</text>
+          <text class="sub" x="796" y="111">CORSMiddleware · allow *</text>
+          <path class="ar srv" d="M950 120 V146" marker-end="url(#ahs)"/>
+
+          <rect class="box s" x="780" y="150" width="340" height="68" rx="10"/>
+          <text class="t" x="796" y="174">preview()</text>
+          <text class="sub" x="796" y="194">file: UploadFile · preset: str</text>
+          <text class="sub" x="796" y="210">coverage: int</text>
+          <path class="ar srv" d="M950 218 V242" marker-end="url(#ahs)"/>
+
+          <rect class="box s" x="780" y="246" width="340" height="58" rx="10"/>
+          <text class="t" x="796" y="270">_cache_key()</text>
+          <text class="sub" x="796" y="290">sha256(image + preset + coverage÷10)</text>
+          <path class="ar srv" d="M950 304 V322" marker-end="url(#ahs)"/>
+
+          <rect class="box" x="880" y="326" width="140" height="40" rx="20"/>
+          <text class="t" x="950" y="351" text-anchor="middle">key in _cache?</text>
+
+          <path class="ar srv" d="M950 366 V398" marker-end="url(#ahs)"/>
+          <text class="lbl s" x="960" y="388">miss</text>
+          <path class="ar srv" d="M1020 346 H1100 V512" marker-end="url(#ahs)"/>
+          <text class="lbl s" x="1060" y="338" text-anchor="middle">hit</text>
+
+          <rect class="box s" x="780" y="402" width="300" height="76" rx="10"/>
+          <text class="t" x="796" y="426">_add_watermark()</text>
+          <text class="sub" x="796" y="446">Pillow · RGBA overlay</text>
+          <text class="sub" x="796" y="464">"HairStyle Preview" tiled, −30°</text>
+          <path class="ar srv" d="M950 478 V512" marker-end="url(#ahs)"/>
+          <text class="lbl s" x="960" y="500">store</text>
+
+          <rect class="box s" x="780" y="516" width="340" height="84" rx="10"/>
+          <text class="t" x="796" y="542">_cache</text>
+          <text class="sub" x="796" y="562">Dict[str, bytes] in process memory</text>
+          <text class="sub" x="796" y="580">lost on restart · no size limit</text>
+        </svg>
+      </div>
+      <figcaption>Solid arrows are calls and data; dashed arrows are a type or constant being read. The orange path is the only network hop: one multipart POST out, one PNG back. Everything the app knows lives in <code>ContentView</code>'s <code>@State</code>; there is no view model, store or persistence.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>One preview, step by step</h2>
+    <ol class="seq">
+      <li><span class="who u">You</span><p>Pick a photo in the <code>PhotosPicker</code>. <code>onChange</code> loads it as <code>Data</code>, builds a <code>UIImage</code>, sets <code>originalImage</code>, and clears any old preview.</p></li>
+      <li><span class="who u">You</span><p>Choose a preset (Crown, Hairline or Part) and drag coverage. Both are plain <code>@State</code>; nothing is sent yet.</p></li>
+      <li><span class="who c">ContentView</span><p>Tapping <b>Preview (Free)</b> sets <code>isLoading</code> and calls <code>PreviewService.preview(image:preset:coverage:)</code> inside a <code>Task</code>.</p></li>
+      <li><span class="who c">PreviewService</span><p>Re-encodes the photo as PNG and writes a multipart body with a random boundary: fields <code>preset</code> and <code>coverage</code>, then <code>file</code> as <code>photo.png</code>.</p></li>
+      <li><span class="who w">Network</span><p><code>URLSession</code> POSTs to <code>Config.apiBaseURL</code> + <code>/v1/preview</code>, which is <code>http://localhost:8000</code> today.</p></li>
+      <li><span class="who s">FastAPI</span><p>Reads the upload and hashes it with the preset and the coverage bucket (coverage ÷ 10, so 40 and 49 share a result).</p></li>
+      <li><span class="who s">Cache / Pillow</span><p>On a hit, returns the stored PNG. On a miss, draws the tiled watermark over the photo, stores the bytes under the key, and returns them as <code>image/png</code>.</p></li>
+      <li><span class="who c">ContentView</span><p>A 2xx response becomes <code>previewImage</code>; any failure becomes <code>errorMessage</code> in red. With both images set, <code>BeforeAfterSlider</code> appears.</p></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Where each piece lives</h2>
+    <div class="grid2">
+      <div class="panel">
+        <h3><span class="sw" style="background: var(--client)"></span>ios/HairStyle/HairStyle/</h3>
+        <ul class="files">
+          <li><code>HairStyleApp.swift</code><span>Entry point, one window</span></li>
+          <li><code>ContentView.swift</code><span>All UI and state, submit logic</span></li>
+          <li><code>PreviewService.swift</code><span>Request building, multipart builder, errors</span></li>
+          <li><code>BeforeAfterSlider.swift</code><span>Mask-based comparison view</span></li>
+          <li><code>Preset.swift</code><span>Crown, Hairline, Part</span></li>
+          <li><code>Config.swift</code><span>Backend base URL</span></li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3><span class="sw" style="background: var(--server)"></span>backend/</h3>
+        <ul class="files">
+          <li><code>main.py</code><span>App, CORS, cache, watermark, the one route</span></li>
+          <li><code>requirements.txt</code><span>fastapi, uvicorn[standard], pillow (unpinned)</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What to know before explaining it</h2>
+    <ul class="caveats">
+      <li><b>No hairstyle is generated yet.</b> Preset and coverage only change the cache key; the server returns the same photo with a watermark. This is the slot where a real model would go.</li>
+      <li><b>Every preview currently fails on the server.</b> <code>_add_watermark</code> calls <code>ImageDraw.textsize</code>, which Pillow 10 removed, so the unpinned install returns a 500.</li>
+      <li><b>The Swift builder may not compile.</b> <code>MultipartFormDataBuilder</code> chains <code>mutating</code> methods on a temporary value.</li>
+      <li><b>localhost only works in the simulator.</b> On a real iPhone, <code>Config.apiBaseURL</code> must point at the Mac's LAN address or a hosted server.</li>
+    </ul>
+  </section>
+
+  <footer>Drawn from the code on main as of 25 Nov 2026. Fixes for the caveats above are being handled separately.</footer>
+</div>
+</body>
+</html>
