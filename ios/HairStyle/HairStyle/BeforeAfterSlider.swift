@@ -23,10 +23,10 @@ struct BeforeAfterSlider: View {
                         .scaledToFit()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .clipped()
-                        .mask(
+                        .mask(alignment: .leading) {
                             Rectangle()
                                 .frame(width: geometry.size.width * sliderValue)
-                        )
+                        }
                 }
             }
             .frame(height: 320)

@@ -49,6 +49,60 @@ def run_one(photo_path: Path, preset: str, coverage: int, provider_name: str, ou
     }
 
 
+RATING_JS = """
+<script>
+const KEY = 'hairline-bakeoff-' + document.title + location.pathname;
+let ratings = {};
+try { ratings = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+function paint() {
+  document.querySelectorAll('.rate').forEach(el => {
+    const v = ratings[el.dataset.id] || 0;
+    el.querySelectorAll('button').forEach(b => b.classList.toggle('on', Number(b.dataset.v) <= v));
+  });
+  const sums = {};
+  for (const [id, v] of Object.entries(ratings)) {
+    const label = document.querySelector(`.rate[data-id="${id}"]`)?.dataset.label;
+    if (!label) continue;
+    (sums[label] = sums[label] || []).push(v);
+  }
+  document.getElementById('score').textContent = Object.entries(sums)
+    .map(([l, vs]) => `${l}: ${(vs.reduce((a, b) => a + b, 0) / vs.length).toFixed(2)} (${vs.length} rated)`).join(' · ') || 'No ratings yet';
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('.rate button');
+  if (!b) return;
+  ratings[b.parentElement.dataset.id] = Number(b.dataset.v);
+  try { localStorage.setItem(KEY, JSON.stringify(ratings)); } catch (e) {}
+  paint();
+});
+document.getElementById('export').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(ratings, null, 2)], {type: 'application/json'}));
+  a.download = 'ratings.json';
+  a.click();
+};
+paint();
+</script>
+"""
+
+
+def summarize(rows: list[dict], providers: list[str]) -> list[dict]:
+    out = []
+    for p in providers:
+        mine = [r for r in rows if r["provider"] == p]
+        ok = [r for r in mine if "error" not in r]
+        secs = sorted(r["seconds"] for r in ok)
+        drifts = sorted(r["face_drift"] for r in ok if r["face_drift"] is not None)
+        out.append({
+            "provider": p,
+            "ok": len(ok),
+            "runs": len(mine),
+            "median_seconds": secs[len(secs) // 2] if secs else None,
+            "median_drift": drifts[len(drifts) // 2] if drifts else None,
+        })
+    return out
+
+
 def write_html(out_dir: Path, rows: list[dict], providers: list[str], blind: bool) -> Path:
     labels = {p: p for p in providers}
     if blind:
@@ -59,13 +113,26 @@ def write_html(out_dir: Path, rows: list[dict], providers: list[str], blind: boo
     by_key: dict[tuple[str, str], dict[str, dict]] = {}
     for r in rows:
         by_key.setdefault((r["photo"], r["preset"]), {})[r["provider"]] = r
+    summary = summarize(rows, providers)
 
     parts = [
         "<!doctype html><meta charset='utf-8'><title>Hairline bake-off</title>",
-        "<style>body{font:14px system-ui;margin:16px}table{border-collapse:collapse}td,th{padding:6px;vertical-align:top;border:1px solid #ddd}"
-        "img{width:260px;display:block}small{color:#666}.err{color:#b00;width:260px}</style>",
-        "<h1>Hairline bake-off</h1><table><tr><th>Photo / preset</th><th>Original</th>",
+        "<style>body{font:14px system-ui;margin:16px}table{border-collapse:collapse;margin-bottom:16px}"
+        "td,th{padding:6px;vertical-align:top;border:1px solid #ddd}img{width:260px;display:block}"
+        "small{color:#666}.err{color:#b00;width:260px}.rate button{border:0;background:none;font-size:20px;"
+        "cursor:pointer;color:#ccc;padding:0 2px}.rate button.on{color:#e6a700}</style>",
+        "<h1>Hairline bake-off</h1>",
+        "<p>Rate each result 1 to 5 for how real it looks. Scores save in this browser. "
+        "<button id='export'>Export ratings</button></p><p id='score'></p>",
+        "<table><tr><th>Model</th><th>Succeeded</th><th>Median seconds</th><th>Median face drift</th></tr>",
     ]
+    for srow in sorted(summary, key=lambda x: labels[x["provider"]]):
+        parts.append(
+            f"<tr><td>{html.escape(labels[srow['provider']])}</td><td>{srow['ok']} / {srow['runs']}</td>"
+            f"<td>{srow['median_seconds'] if srow['median_seconds'] is not None else ''}</td>"
+            f"<td>{srow['median_drift'] if srow['median_drift'] is not None else ''}</td></tr>"
+        )
+    parts.append("</table><table><tr><th>Photo / preset</th><th>Original</th>")
     parts += [f"<th>{html.escape(labels[p])}</th>" for p in cols]
     parts.append("</tr>")
     for (photo, preset), cells in sorted(by_key.items()):
@@ -79,12 +146,18 @@ def write_html(out_dir: Path, rows: list[dict], providers: list[str], blind: boo
                 parts.append(f"<td><div class='err'>{html.escape(r['error'])}</div></td>")
             else:
                 meta = f"{r['seconds']} s" + (f" · drift {r['face_drift']}" if r["face_drift"] is not None else "")
-                parts.append(f"<td><img src='{html.escape(r['file'])}'><small>{html.escape(meta)}</small></td>")
+                stars = "".join(f"<button data-v='{v}' aria-label='{v} stars'>★</button>" for v in range(1, 6))
+                rid = html.escape(r["file"])
+                parts.append(
+                    f"<td><img src='{rid}'><small>{html.escape(meta)}</small>"
+                    f"<div class='rate' data-id='{rid}' data-label='{html.escape(labels[p])}'>{stars}</div></td>"
+                )
         parts.append("</tr>")
     parts.append("</table>")
+    parts.append(RATING_JS)
     path = out_dir / "index.html"
     path.write_text("".join(parts))
-    (out_dir / "results.json").write_text(json.dumps({"labels": labels, "rows": rows}, indent=2))
+    (out_dir / "results.json").write_text(json.dumps({"labels": labels, "summary": summary, "rows": rows}, indent=2))
     return path
 
 
@@ -92,7 +165,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("photos", type=Path)
     ap.add_argument("--providers", default="")
-    ap.add_argument("--presets", default="hairline")
+    ap.add_argument("--presets", default="auto")
     ap.add_argument("--coverage", type=int, default=50)
     ap.add_argument("--blind", action="store_true")
     ap.add_argument("--out", type=Path, default=Path("bakeoff-out"))

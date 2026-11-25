@@ -14,7 +14,6 @@
         010000000000000000000005 /* PreviewService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000014 /* PreviewService.swift */; };
         010000000000000000000006 /* BeforeAfterSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000015 /* BeforeAfterSlider.swift */; };
         010000000000000000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000016 /* Assets.xcassets */; };
-        010000000000000000000008 /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000017 /* Info.plist */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -130,7 +129,6 @@
             buildActionMask = 2147483647;
             files = (
                 010000000000000000000007 /* Assets.xcassets in Resources */,
-                010000000000000000000008 /* Info.plist in Resources */,
             );
             runOnlyForDeploymentPostprocessing = 0;
         };
@@ -165,6 +163,8 @@
                 MARKETING_VERSION = 1.0;
                 PRODUCT_BUNDLE_IDENTIFIER = com.example.HairStyle;
                 PRODUCT_NAME = HairStyle;
+                SDKROOT = iphoneos;
+                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
                 SWIFT_VERSION = 5.0;
                 TARGETED_DEVICE_FAMILY = 1;
             };
@@ -182,6 +182,8 @@
                 MARKETING_VERSION = 1.0;
                 PRODUCT_BUNDLE_IDENTIFIER = com.example.HairStyle;
                 PRODUCT_NAME = HairStyle;
+                SDKROOT = iphoneos;
+                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
                 SWIFT_VERSION = 5.0;
                 TARGETED_DEVICE_FAMILY = 1;
             };
@@ -194,6 +196,8 @@
                 DEVELOPMENT_TEAM = "";
                 ENABLE_PREVIEWS = YES;
                 IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+                SDKROOT = iphoneos;
+                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
                 SWIFT_VERSION = 5.0;
             };
             name = Debug;
@@ -205,6 +209,8 @@
                 DEVELOPMENT_TEAM = "";
                 ENABLE_PREVIEWS = YES;
                 IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+                SDKROOT = iphoneos;
+                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
                 SWIFT_VERSION = 5.0;
             };
             name = Release;

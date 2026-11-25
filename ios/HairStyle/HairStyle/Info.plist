@@ -21,8 +21,13 @@
         <string>UIInterfaceOrientationPortrait</string>
     </array>
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>Select a photo to preview your hairstyle.</string>
+    <string>Choose a photo to preview a fuller hairline.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
-    <string>Save your previewed hairstyle image.</string>
+    <string>Save your improved photo to your library.</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
 </dict>
 </plist>

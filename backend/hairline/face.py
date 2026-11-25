@@ -19,6 +19,7 @@ MODEL_PATH = Path(os.environ.get("FACE_LANDMARKER_PATH", Path(__file__).resolve(
 # Landmark indices in the 478-point MediaPipe face mesh.
 FOREHEAD_TOP = 10
 CHIN = 152
+NOSE_TIP = 1
 BROWS = [70, 63, 105, 66, 107, 336, 296, 334, 293, 300]
 FACE_OVAL = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378,
              400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21,
@@ -47,6 +48,12 @@ class Face:
     def oval_x(self) -> tuple[float, float]:
         xs = self.points[FACE_OVAL, 0]
         return float(xs.min()), float(xs.max())
+
+    @property
+    def yaw(self) -> float:
+        """Nose offset from the face centre as a fraction of face width (0 = facing camera)."""
+        lo, hi = self.oval_x
+        return (float(self.points[NOSE_TIP, 0]) - (lo + hi) / 2) / max(hi - lo, 1.0)
 
     @property
     def width(self) -> float:

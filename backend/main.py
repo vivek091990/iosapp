@@ -84,8 +84,8 @@ def health() -> dict:
 @app.post("/v1/preview")
 async def preview(
     file: UploadFile = File(...),
-    preset: str = Form(...),
-    coverage: int = Form(...),
+    preset: str = Form("Auto"),
+    coverage: int = Form(50),
     model: str | None = Form(None),
 ) -> Response:
     image_bytes = await file.read()
@@ -121,5 +121,6 @@ async def preview(
             "X-Hairline-Provider": result.provider,
             "X-Hairline-Seconds": f"{result.seconds:.2f}",
             "X-Hairline-Attempts": str(result.attempts),
+            "X-Hairline-Preset": result.preset,
         },
     )

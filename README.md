@@ -14,9 +14,11 @@ The backend turns a photo into a one-tap hairline preview:
 
 1. Fix orientation and cap the photo at about 1.5 MP.
 2. Find the face (MediaPipe Face Landmarker) and the hair/forehead area (MediaPipe selfie segmenter).
-3. Ask an image-edit model to fill in the hairline, crown or part (prompt per preset, strength from `coverage`).
-4. Align the model's output to the original face and paste back only the hair region, so everything from the eyebrows down is the original photo, pixel for pixel.
-5. If the model moved the face too much, retry once; return the PNG and cache it for 15 minutes in memory.
+3. Check the photo (face big enough, facing the camera, head not cut off, not too dark) and return a message the app can show if not.
+4. Ask an image-edit model to fill in the hairline, crown or part (prompt per preset, strength from `coverage`). `Auto` picks hairline for a front-facing photo and crown when no face is visible.
+5. Align the model's output to the original face and paste back only the hair region, so everything from the eyebrows down is the original photo, pixel for pixel.
+6. Shift the new hair's color toward the person's existing hair, so the fill doesn't come out a shade off.
+7. If the model moved the face too much, retry once; return the PNG and cache it for 15 minutes in memory.
 
 ### Requirements
 
@@ -55,17 +57,17 @@ export GEMINI_API_KEY=...
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-`POST /v1/preview` takes multipart form data (`file`, `preset` = Hairline/Crown/Part, `coverage` 0-100, optional `model`) and returns a PNG. `GET /v1/health` lists which models have keys set. Photo problems (no face, several faces) return 422 with a message the app can show.
+`POST /v1/preview` takes multipart form data (`file`, `preset` = Auto/Hairline/Crown/Part (default Auto), `coverage` 0-100 (default 50), optional `model`) and returns a PNG. `GET /v1/health` lists which models have keys set. Photo problems (no face, several faces) return 422 with a message the app can show.
 
 ### Bake-off: make the models compete
 
 Put test photos in a folder and run every model that has a key:
 
 ```bash
-python scripts/bakeoff.py ~/hairline-photos --presets hairline,crown,part --blind
+python scripts/bakeoff.py ~/hairline-photos --blind
 ```
 
-It writes `bakeoff-out/<time>/index.html` with the original and each model's result side by side, plus seconds and face drift per result. `--blind` hides model names (the key is in `results.json`) so people can rate realism without bias.
+It writes `bakeoff-out/<time>/index.html` with the original and each model's result side by side, a summary per model (success rate, median seconds, face drift) and 1 to 5 star ratings you can export. `--presets` defaults to `auto`. `--blind` hides model names (the key is in `results.json`) so people can rate realism without bias.
 
 ### Tests
 
