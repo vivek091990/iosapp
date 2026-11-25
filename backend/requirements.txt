@@ -1,4 +1,4 @@
-# Requires Python 3.10+ (google-genai and mediapipe have no 3.9 builds).
+# Requires Python 3.10+ (google-genai>=1.50 is not available for 3.9).
 fastapi>=0.115
 uvicorn[standard]>=0.30
 python-multipart>=0.0.9
