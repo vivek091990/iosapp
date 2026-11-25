@@ -8,7 +8,7 @@ from PIL import Image
 from .face import Face
 
 MIN_FACE_FRACTION = 0.12  # face width / photo width
-MAX_YAW = 0.18
+MAX_YAW = 0.25  # tuned on real selfies: 0.2 still reads as front-facing, 0.35 is clearly turned
 MIN_HEADROOM = 0.15  # space above the forehead landmark, in face heights
 MIN_BRIGHTNESS = 45  # mean luma of the face box, 0-255
 

@@ -5,6 +5,13 @@ import math
 
 from PIL import Image, ImageOps
 
+try:  # iPhone photos are HEIC; Pillow needs this plugin to open them
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+except ImportError:  # pragma: no cover
+    pass
+
 MAX_PIXELS = 1_500_000
 
 

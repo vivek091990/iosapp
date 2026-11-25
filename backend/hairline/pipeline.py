@@ -60,7 +60,7 @@ def run_preview(photo: Image.Image, preset: str, coverage: int, provider: Provid
     faces = detect_faces(photo)
     notes: list[str] = []
     if len(faces) > 1:
-        raise PreviewError("Please use a photo with just one face.")
+        raise PreviewError("This photo has more than one person. Crop it to just you and try again.")
 
     if preset_key == "auto":
         # A front-facing photo means hairline; no face usually means a top-down crown shot.
