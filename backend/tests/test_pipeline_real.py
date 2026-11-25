@@ -48,3 +48,22 @@ def test_face_below_brows_is_untouched(photo):
     brow = int(face.brow_top_y)
     assert np.abs(out[brow:] - orig[brow:]).max() == 0
     assert np.abs(out[:brow] - orig[:brow]).max() > 50  # hair region was replaced
+
+
+def test_fill_zone_is_bare_skin_above_target_hairline(photo):
+    from hairline.face import detect_faces
+    from hairline.mask import fill_zone_mask, target_hairline_y
+    from hairline.segment import FACE_SKIN, HAIR, category_mask
+
+    face = detect_faces(photo)[0]
+    cats = category_mask(photo)
+    zone = fill_zone_mask(face, cats)
+    line = target_hairline_y(face, photo.width)
+    ys, xs = np.nonzero(zone)
+    assert not (zone & (cats == HAIR)).any()
+    assert (cats[zone] == FACE_SKIN).all()
+    if len(ys):
+        assert (ys < line[xs]).all()
+    # target hairline sits between the top of the face mesh and the brows
+    cx = int(sum(face.oval_x) / 2)
+    assert face.forehead_y - 0.2 * face.height < line[cx] < face.brow_top_y

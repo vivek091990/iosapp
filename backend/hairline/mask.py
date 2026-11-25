@@ -56,3 +56,48 @@ def hair_region_mask(
     arr[int(min(h, max(0, bottom + feather))):, :] = 0
     return Image.fromarray(arr, mode="L")
 
+
+
+# Landmarks for the rule-of-thirds hairline estimate.
+GLABELLA = 168
+SUBNASALE = 2
+
+
+def target_hairline_y(face: Face, width: int) -> np.ndarray:
+    """Per-column y of a natural target hairline.
+
+    Rule of thirds: hairline-to-glabella is about glabella-to-nose-base. The line arcs up
+    slightly toward the temples, as a natural adult hairline does.
+    """
+    p = face.points
+    glabella_y, subnasale_y = float(p[GLABELLA, 1]), float(p[SUBNASALE, 1])
+    centre_y = glabella_y - (subnasale_y - glabella_y)
+    lo, hi = face.oval_x
+    cx, half = (lo + hi) / 2, max((hi - lo) / 2, 1.0)
+    t = np.clip((np.arange(width) - cx) / half, -1.3, 1.3)
+    return centre_y - 0.10 * face.height * t**2
+
+
+def fill_zone_mask(face: Face, categories: np.ndarray) -> np.ndarray:
+    """Boolean mask of bare forehead/temple skin above the target hairline.
+
+    This is where new hair should grow. Existing hair (segmenter class HAIR) is not part
+    of it, and nothing below the target line is.
+    """
+    h, w = categories.shape
+    lo, hi = face.oval_x
+    fw = hi - lo
+    line = target_hairline_y(face, w)
+    cols = np.arange(w)[None, :]
+    zone = (
+        (categories == FACE_SKIN)
+        & (np.arange(h)[:, None] < line[None, :])
+        & (cols > lo - 0.05 * fw)
+        & (cols < hi + 0.05 * fw)
+    )
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(zone.astype(np.uint8))
+    keep = np.zeros_like(zone)
+    for i in range(1, n):  # drop specks from segmentation noise
+        if stats[i, cv2.CC_STAT_AREA] > 0.002 * fw * fw:
+            keep |= labels == i
+    return keep
