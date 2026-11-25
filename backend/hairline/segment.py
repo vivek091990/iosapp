@@ -45,7 +45,10 @@ def category_mask(img: Image.Image) -> np.ndarray:
     rgb = np.ascontiguousarray(np.asarray(img.convert("RGB")))
     with _lock:
         result = _get_segmenter().segment(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
-    cats = np.asarray(result.category_mask.numpy_view()).squeeze()
+        # numpy_view() points into MediaPipe-owned memory; copy before the result is freed,
+        # or concurrent requests read freed memory and crash the process.
+        cats = np.array(result.category_mask.numpy_view(), copy=True).squeeze()
+        del result
     if cats.shape != (img.height, img.width):
         cats = np.asarray(Image.fromarray(cats.astype(np.uint8)).resize(img.size, Image.NEAREST))
     return cats
