@@ -36,7 +36,7 @@ def test_preview_returns_png_and_caches(monkeypatch):
     client = TestClient(main.app)
     r1 = _post(client)
     assert r1.status_code == 200 and r1.headers["content-type"] == "image/png"
-    assert r1.headers["X-Hairline-Provider"] == "nano-banana-2"
+    assert r1.headers["X-Hairline-Provider"] == "nano-banana-pro"
     Image.open(io.BytesIO(r1.content)).verify()
     r2 = _post(client)
     assert r2.status_code == 200 and len(calls) == 1

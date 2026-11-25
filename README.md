@@ -37,13 +37,13 @@ pip install -r requirements-dev.txt
 
 ### Models and keys
 
-Pick the default with `HAIRLINE_PROVIDER` (default `nano-banana-2`), or per request with an optional `model` form field.
+Pick the default with `HAIRLINE_PROVIDER` (default `nano-banana-pro`), or per request with an optional `model` form field.
 
 | `model` | Model | Key |
 | --- | --- | --- |
-| `nano-banana-2` | Google Gemini 3.1 Flash Image | `GEMINI_API_KEY` |
+| `nano-banana-2` | Google Gemini 3.1 Flash Image (faster, cheaper) | `GEMINI_API_KEY` |
 | `nano-banana-2-lite` | Google Gemini 3.1 Flash Lite Image (cheaper) | `GEMINI_API_KEY` |
-| `nano-banana-pro` | Google Gemini 3 Pro Image | `GEMINI_API_KEY` |
+| `nano-banana-pro` | Google Gemini 3 Pro Image (default: best at keeping existing hair) | `GEMINI_API_KEY` |
 | `gpt-image` | OpenAI GPT Image | `OPENAI_API_KEY` |
 | `flux-kontext` | Black Forest Labs FLUX.1 Kontext pro | `BFL_API_KEY` |
 | `flux-2` | Black Forest Labs FLUX.2 pro | `BFL_API_KEY` |

@@ -165,7 +165,7 @@ PROVIDERS: dict[str, Callable[[], Provider]] = {
     "qwen-edit": lambda: FalProvider("qwen-edit", os.environ.get("FAL_QWEN_ENDPOINT", "fal-ai/qwen-image-edit-2511")),
 }
 
-DEFAULT_PROVIDER = "nano-banana-2"
+DEFAULT_PROVIDER = "nano-banana-pro"  # picked by Vivek after the first real run: keeps existing hair, fills gaps
 
 
 def get_provider(name: str | None = None) -> Provider:

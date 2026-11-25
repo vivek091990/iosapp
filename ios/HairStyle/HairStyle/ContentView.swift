@@ -41,7 +41,7 @@ struct ContentView: View {
                     if isLoading {
                         HStack(spacing: 12) {
                             ProgressView()
-                            Text("Filling in your hairline. This takes a few seconds.")
+                            Text("Filling in your hairline. This takes about 15 seconds.")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
