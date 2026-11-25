@@ -157,6 +157,7 @@ class FalProvider:
 # Model ids can be overridden without a code change, since vendors rename preview models.
 PROVIDERS: dict[str, Callable[[], Provider]] = {
     "nano-banana-2": lambda: GeminiProvider("nano-banana-2", os.environ.get("GEMINI_FLASH_IMAGE_MODEL", "gemini-3.1-flash-image")),
+    "nano-banana-2-lite": lambda: GeminiProvider("nano-banana-2-lite", os.environ.get("GEMINI_LITE_IMAGE_MODEL", "gemini-3.1-flash-lite-image")),
     "nano-banana-pro": lambda: GeminiProvider("nano-banana-pro", os.environ.get("GEMINI_PRO_IMAGE_MODEL", "gemini-3-pro-image")),
     "gpt-image": lambda: OpenAIProvider("gpt-image", os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-2")),
     "flux-kontext": lambda: BFLProvider("flux-kontext", os.environ.get("BFL_KONTEXT_ENDPOINT", "flux-kontext-pro")),
@@ -177,6 +178,7 @@ def get_provider(name: str | None = None) -> Provider:
 def configured_providers() -> list[str]:
     needs = {
         "nano-banana-2": "GEMINI_API_KEY",
+        "nano-banana-2-lite": "GEMINI_API_KEY",
         "nano-banana-pro": "GEMINI_API_KEY",
         "gpt-image": "OPENAI_API_KEY",
         "flux-kontext": "BFL_API_KEY",

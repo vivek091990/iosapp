@@ -24,7 +24,7 @@ The backend turns a photo into a one-tap hairline preview:
 
 - Python 3.10 or newer (google-genai does not install on 3.9; macOS ships 3.9, so use Homebrew or python.org Python)
 - On Linux servers, MediaPipe needs `libegl1` and `libgles2` (`apt-get install libegl1 libgles2`).
-- At least one model API key (see below). MediaPipe model files download to `backend/models/` on first use.
+- At least one model API key (see below). Gemini image models have no free-tier quota: the Google AI Studio project needs billing turned on, or every call returns 429. MediaPipe model files download to `backend/models/` on first use.
 
 ### Install
 
@@ -42,13 +42,14 @@ Pick the default with `HAIRLINE_PROVIDER` (default `nano-banana-2`), or per requ
 | `model` | Model | Key |
 | --- | --- | --- |
 | `nano-banana-2` | Google Gemini 3.1 Flash Image | `GEMINI_API_KEY` |
+| `nano-banana-2-lite` | Google Gemini 3.1 Flash Lite Image (cheaper) | `GEMINI_API_KEY` |
 | `nano-banana-pro` | Google Gemini 3 Pro Image | `GEMINI_API_KEY` |
 | `gpt-image` | OpenAI GPT Image | `OPENAI_API_KEY` |
 | `flux-kontext` | Black Forest Labs FLUX.1 Kontext pro | `BFL_API_KEY` |
 | `flux-2` | Black Forest Labs FLUX.2 pro | `BFL_API_KEY` |
 | `qwen-edit` | Qwen-Image-Edit (open weights) via fal.ai | `FAL_KEY` |
 
-Model ids can be overridden with `GEMINI_FLASH_IMAGE_MODEL`, `GEMINI_PRO_IMAGE_MODEL`, `OPENAI_IMAGE_MODEL`, `BFL_KONTEXT_ENDPOINT`, `BFL_FLUX2_ENDPOINT` and `FAL_QWEN_ENDPOINT`. Set `HAIRLINE_WATERMARK=0` to turn off the preview watermark.
+Model ids can be overridden with `GEMINI_FLASH_IMAGE_MODEL`, `GEMINI_LITE_IMAGE_MODEL`, `GEMINI_PRO_IMAGE_MODEL`, `OPENAI_IMAGE_MODEL`, `BFL_KONTEXT_ENDPOINT`, `BFL_FLUX2_ENDPOINT` and `FAL_QWEN_ENDPOINT`. Set `HAIRLINE_WATERMARK=0` to turn off the preview watermark.
 
 ### Run
 
