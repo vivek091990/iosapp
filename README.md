@@ -48,8 +48,9 @@ Pick the default with `HAIRLINE_PROVIDER` (default `nano-banana-pro`), or per re
 | `flux-kontext` | Black Forest Labs FLUX.1 Kontext pro | `BFL_API_KEY` |
 | `flux-2` | Black Forest Labs FLUX.2 pro | `BFL_API_KEY` |
 | `qwen-edit` | Qwen-Image-Edit (open weights) via fal.ai | `FAL_KEY` |
+| `local-klein` | FLUX.2 klein 4B (open weights, Apache 2.0) running on this Mac via mflux | none; `uv tool install mflux` (Apple Silicon) |
 
-Model ids can be overridden with `GEMINI_FLASH_IMAGE_MODEL`, `GEMINI_LITE_IMAGE_MODEL`, `GEMINI_PRO_IMAGE_MODEL`, `OPENAI_IMAGE_MODEL`, `BFL_KONTEXT_ENDPOINT`, `BFL_FLUX2_ENDPOINT` and `FAL_QWEN_ENDPOINT`. Set `HAIRLINE_WATERMARK=0` to turn off the preview watermark.
+Model ids can be overridden with `GEMINI_FLASH_IMAGE_MODEL`, `GEMINI_LITE_IMAGE_MODEL`, `GEMINI_PRO_IMAGE_MODEL`, `OPENAI_IMAGE_MODEL`, `BFL_KONTEXT_ENDPOINT`, `BFL_FLUX2_ENDPOINT` and `FAL_QWEN_ENDPOINT`; `MFLUX_MODEL` picks the local model (default `Runpod/FLUX.2-klein-4B-mflux-4bit`, 4-bit, fits a 16 GB Mac). Set `HAIRLINE_WATERMARK=0` to turn off the preview watermark.
 
 ### Run
 

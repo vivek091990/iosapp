@@ -69,3 +69,27 @@ def test_provider_registry():
     assert get_provider("nano-banana-2").name == "nano-banana-2"
     with pytest.raises(ProviderError):
         get_provider("nope")
+
+
+def test_local_klein_reports_missing_mflux(monkeypatch):
+    from hairline.providers import ProviderNotConfigured
+
+    monkeypatch.delenv("MFLUX_EDIT_BIN", raising=False)
+    monkeypatch.setenv("PATH", "/nonexistent")
+    with pytest.raises(ProviderNotConfigured):
+        get_provider("local-klein").edit(Image.new("RGB", (64, 48)), "x")
+
+
+def test_local_klein_calls_mflux(monkeypatch, tmp_path):
+    fake = tmp_path / "fake-mflux"
+    fake.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\nfrom PIL import Image\n"
+        "a = sys.argv\nout = a[a.index('--output') + 1]\n"
+        "w, h = int(a[a.index('--width') + 1]), int(a[a.index('--height') + 1])\n"
+        "Image.new('RGB', (w, h), (1, 2, 3)).save(out)\n"
+    )
+    fake.chmod(0o755)
+    monkeypatch.setenv("MFLUX_EDIT_BIN", str(fake))
+    out = get_provider("local-klein").edit(Image.new("RGB", (2000, 1500)), "x")
+    assert out.size == (1024, 768) and out.getpixel((0, 0)) == (1, 2, 3)

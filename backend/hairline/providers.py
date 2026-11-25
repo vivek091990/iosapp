@@ -154,6 +154,45 @@ class FalProvider:
         return _download(url)
 
 
+@dataclass
+class MfluxProvider:
+    """Open-weight FLUX.2 klein running locally on Apple Silicon through mflux (MLX).
+
+    No API key and no per-image cost; needs `mflux` installed on the machine running the
+    backend (`uv tool install mflux`). Set MFLUX_MODEL to a local or Hub model path, e.g. the
+    4-bit `Runpod/FLUX.2-klein-4B-mflux-4bit`, which fits a 16 GB Mac.
+    """
+
+    name: str
+    model: str
+    steps: int = 4
+    timeout_s: float = 600
+
+    def edit(self, image: Image.Image, prompt: str) -> Image.Image:
+        import shutil
+        import subprocess
+        import tempfile
+
+        exe = os.environ.get("MFLUX_EDIT_BIN") or shutil.which("mflux-generate-flux2-edit")
+        if not exe:
+            raise ProviderNotConfigured("mflux is not installed (mflux-generate-flux2-edit not found)")
+        # FLUX works in 16 px blocks; keep the aspect ratio with the long side at 1024.
+        scale = 1024 / max(image.size)
+        w, h = (max(16, int(round(d * scale / 16)) * 16) for d in image.size)
+        with tempfile.TemporaryDirectory() as tmp:
+            src, out = os.path.join(tmp, "in.jpg"), os.path.join(tmp, "out.png")
+            image.convert("RGB").resize((w, h), Image.LANCZOS).save(src, quality=95)
+            cmd = [exe, "--model", self.model, "--image-paths", src, "--prompt", prompt,
+                   "--steps", str(self.steps), "--guidance", "1.0", "--seed", "42",
+                   "--width", str(w), "--height", str(h), "--output", out]
+            if os.environ.get("MFLUX_LOW_RAM", "1") != "0":
+                cmd.append("--low-ram")
+            done = subprocess.run(cmd, capture_output=True, text=True, timeout=self.timeout_s)
+            if done.returncode != 0 or not os.path.exists(out):
+                raise ProviderError(f"mflux failed: {(done.stderr or done.stdout)[-400:]}")
+            return Image.open(out).convert("RGB")
+
+
 # Model ids can be overridden without a code change, since vendors rename preview models.
 PROVIDERS: dict[str, Callable[[], Provider]] = {
     "nano-banana-2": lambda: GeminiProvider("nano-banana-2", os.environ.get("GEMINI_FLASH_IMAGE_MODEL", "gemini-3.1-flash-image")),
@@ -163,6 +202,7 @@ PROVIDERS: dict[str, Callable[[], Provider]] = {
     "flux-kontext": lambda: BFLProvider("flux-kontext", os.environ.get("BFL_KONTEXT_ENDPOINT", "flux-kontext-pro")),
     "flux-2": lambda: BFLProvider("flux-2", os.environ.get("BFL_FLUX2_ENDPOINT", "flux-2-pro")),
     "qwen-edit": lambda: FalProvider("qwen-edit", os.environ.get("FAL_QWEN_ENDPOINT", "fal-ai/qwen-image-edit-2511")),
+    "local-klein": lambda: MfluxProvider("local-klein", os.environ.get("MFLUX_MODEL", "Runpod/FLUX.2-klein-4B-mflux-4bit")),
 }
 
 DEFAULT_PROVIDER = "nano-banana-pro"  # picked by Vivek after the first real run: keeps existing hair, fills gaps
@@ -185,4 +225,9 @@ def configured_providers() -> list[str]:
         "flux-2": "BFL_API_KEY",
         "qwen-edit": "FAL_KEY",
     }
-    return [name for name, env in needs.items() if os.environ.get(env)]
+    found = [name for name, env in needs.items() if os.environ.get(env)]
+    import shutil
+
+    if os.environ.get("MFLUX_EDIT_BIN") or shutil.which("mflux-generate-flux2-edit"):
+        found.append("local-klein")
+    return found
