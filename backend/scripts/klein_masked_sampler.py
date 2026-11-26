@@ -3,13 +3,13 @@
 mflux's klein edit command has no mask input. This wrapper adds one without changing the
 installed package: after every denoising step, latents OUTSIDE the token mask are reset to
 the reference image's latents noised to the current sigma, so only the masked area is
-generated. Optionally (PRIOR > 0) the masked area is pulled once, on the first step, toward
+generated. Optionally (--prior > 0) the masked area is pulled, on the first --prior-steps steps, toward
 the reference's pixels there (a hair-coloured prefill), which is what makes klein put hair
 on bare skin instead of redrawing skin.
 
 Run it with mflux's own Python (it is not part of the backend venv):
 
-    ~/.local/share/uv/tools/mflux/bin/python scripts/klein_masked_sampler.py TOKMASK.npy [--prior 0.5] -- \
+    ~/.local/share/uv/tools/mflux/bin/python scripts/klein_masked_sampler.py TOKMASK.npy [--prior 0.5] [--prior-steps 1] -- \
         --low-ram --model Runpod/FLUX.2-klein-4B-mflux-4bit --base-model flux2-klein-4b \
         --image-paths PREFILLED_CROP.png --prompt "..." --steps 4 --seed 42 \
         --width W --height H --output OUT.png
@@ -31,6 +31,7 @@ if "--" not in sys.argv:
 _own, _mflux = sys.argv[1 : sys.argv.index("--")], sys.argv[sys.argv.index("--") + 1 :]
 TOKMASK = _own[0]
 PRIOR = float(_own[_own.index("--prior") + 1]) if "--prior" in _own else 0.0
+PRIOR_STEPS = int(_own[_own.index("--prior-steps") + 1]) if "--prior-steps" in _own else 1
 sys.argv = [sys.argv[0], *_mflux]
 
 import mlx.core as mx  # noqa: E402
@@ -62,7 +63,7 @@ def _generate(self, seed, prompt, num_inference_steps=4, height=1024, width=1024
     if m.shape != (lat_h, lat_w):
         raise SystemExit(f"token mask is {m.shape}, expected {(lat_h, lat_w)} for {width}x{height}")
     _state.update(eps=eps, m=mx.array(m.reshape(1, -1, 1)), n=lat_h * lat_w)
-    print(f"masked sampling: {int(m.sum())}/{m.size} tokens generated, prior {PRIOR}")
+    print(f"masked sampling: {int(m.sum())}/{m.size} tokens generated, prior {PRIOR} x {PRIOR_STEPS} step(s)")
     return _orig_generate(
         self, seed=seed, prompt=prompt, num_inference_steps=num_inference_steps, height=height, width=width, **kwargs
     )
@@ -83,7 +84,7 @@ def _step(self, noise, timestep, latents, sigmas, **kwargs):
     m = _state["m"].astype(dt)
     s = sigmas[timestep + 1].astype(dt)
     known = (1 - s) * x0 + s * eps
-    if PRIOR > 0 and timestep == 0:
+    if PRIOR > 0 and timestep < PRIOR_STEPS:
         out = out * (1 - PRIOR * m) + known * (PRIOR * m)
     return (m * out + (1 - m) * known).astype(dt)
 

@@ -17,10 +17,9 @@ score  (backend venv)  pastes each result back (lighting correction + pyramid bl
                        best per photo; writes OUT/sheet.jpg and OUT/scores.json.
 
 Scores: coverage = % of the fill zone with hair probability >= 0.5 on the result; colour = Lab
-delta-E between new hair in the zone and the existing hair just above it; seam = mean gradient
-magnitude across the target line divided by that inside the existing hair; detail = fine strand
-detail (mean |Laplacian|) inside the zone divided by that of his existing hair, which catches a
-flat hair-coloured patch (klein keeping the prefill) that coverage alone scores as perfect.
+delta-E between new hair in the zone and the existing hair just above it;
+hf = high-frequency energy of the new hair divided by his existing hair's (0.6-1.4 is natural);
+results that stay within FLAT_PASTE_MAE of the prefill are flat pastes and are penalised.
 """
 from __future__ import annotations
 
@@ -40,11 +39,13 @@ MODEL = os.environ.get("MFLUX_MODEL", "Runpod/FLUX.2-klein-4B-mflux-4bit")
 PROMPT = "photo of a man with dense dark curly hair and a full natural hairline, realistic hair strands, soft indoor light"
 SAMPLER = Path(__file__).resolve().parent / "klein_masked_sampler.py"
 PRIOR = 0.5
+FLAT_PASTE_MAE = 10.0  # mean |result - prefill| in the zone below this = klein kept the paste
 CROP_LONG_SIDE = 1024
 
 
 # ---------------------------------------------------------------- prep
-def prep(photos: list[Path], out: Path, coverage: int) -> None:
+def prep(photos: list[Path], out: Path, coverage: int, pull: float = 0.5, pull_steps: int = 1,
+         overlap_ipd: float = 0.12, crop_scale: float = 1.0, strands: int = 0) -> None:
     import cv2
     import numpy as np
     from PIL import Image
@@ -70,7 +71,7 @@ def prep(photos: list[Path], out: Path, coverage: int) -> None:
                int(min(w, hi + 0.45 * fw)), int(min(h, face.brow_top_y)))
         hp = hair_probability(img, box)
         zone = fill_zone_mask(face, cats, hp, coverage=coverage)
-        alpha = inpaint_mask(face, zone, cats).astype(np.float32)
+        alpha = inpaint_mask(face, zone, cats, overlap_ipd=overlap_ipd).astype(np.float32)
         ipd = _ipd(face)
         line = target_hairline_y(face, w, coverage=coverage)
         rng = np.random.default_rng(7)
@@ -87,17 +88,26 @@ def prep(photos: list[Path], out: Path, coverage: int) -> None:
             near = (yy > bottom[None, :] - 0.04 * ipd) & (zone.any(0)[None, :])
             prefill = (zone & ~(near & (yy > edge))) | (near & (yy <= edge) & (cats != HAIR) & (yy < bottom[None, :] + 0.03 * ipd))
 
-        # Hair colour of his existing hair, with a little texture.
+        # His existing hair's colour plus texture noise at his hair's own contrast (a flat colour
+        # reads as a dark cap), fading in over a 0.12 IPD transition zone at the front edge.
         arr = np.asarray(img).astype(np.float32)
         hair_px = arr[(hp > 0.7)]
         colour = np.median(hair_px, 0) if len(hair_px) > 50 else np.array([40, 28, 22], np.float32)
-        tex = cv2.GaussianBlur(rng.standard_normal((h, w)).astype(np.float32), (0, 0), 1.5)[..., None] * 18
-        a = cv2.GaussianBlur(prefill.astype(np.float32), (0, 0), 2.0)[..., None]
-        filled = arr * (1 - a) + (colour + tex) * a
-        # A few sparse single strands just below the edge.
-        strands = np.zeros((h, w), np.float32)
+        contrast = float(np.clip(hair_px.mean(1).std(), 8, 40)) if len(hair_px) > 50 else 18.0
+        fine = cv2.GaussianBlur(rng.standard_normal((h, w)).astype(np.float32), (0, 0), 1.0)
+        coarse = cv2.GaussianBlur(rng.standard_normal((h, w)).astype(np.float32), (0, 0), 0.03 * ipd)
+        tex = (fine / (fine.std() + 1e-6) * 0.6 + coarse / (coarse.std() + 1e-6) * 0.8)[..., None] * contrast
+        a = cv2.GaussianBlur(prefill.astype(np.float32), (0, 0), 2.0)
         if len(cols):
-            for x in rng.choice(cols, size=min(len(cols) // 10, 25), replace=False):
+            a *= np.clip((edge - yy) / (0.12 * ipd), 0.25, 1.0)  # density fade toward the front edge
+        a = a[..., None]
+        filled = arr * (1 - a) + (colour + tex) * a
+        # Optional stray strands just below the edge. Off by default: klein tends to keep them as
+        # drawn tick marks rather than turning them into hair.
+        n_strands = strands
+        strands = np.zeros((h, w), np.float32)
+        if len(cols) and n_strands:
+            for x in rng.choice(cols, size=min(len(cols), n_strands), replace=False):
                 y0 = int(bottom[x])
                 length = rng.uniform(0.03, 0.06) * ipd
                 ang = np.deg2rad(rng.uniform(70, 110))
@@ -110,7 +120,7 @@ def prep(photos: list[Path], out: Path, coverage: int) -> None:
         # Head crop around the generation mask, ~4:3, long side ~1024, multiple of 16.
         ys, xs = np.where(gen > 0.02)
         cx, cy = (xs.min() + xs.max()) / 2, (ys.min() + ys.max()) / 2
-        side = max((xs.max() - xs.min()) * 1.6, (ys.max() - ys.min()) * 2.2 * 4 / 3)
+        side = max((xs.max() - xs.min()) * 1.6, (ys.max() - ys.min()) * 2.2 * 4 / 3) * crop_scale
         x0, x1 = int(max(0, cx - side / 2)), int(min(w, cx + side / 2))
         y0, y1 = int(max(0, cy - side * 0.75 * 0.55)), int(min(h, cy + side * 0.75 * 0.45))
         s = CROP_LONG_SIDE / max(x1 - x0, y1 - y0)
@@ -123,7 +133,8 @@ def prep(photos: list[Path], out: Path, coverage: int) -> None:
         np.save(d / "zone.npy", zone)
         np.save(d / "alpha.npy", np.maximum(alpha, cv2.GaussianBlur(strand_area.astype(np.float32), (0, 0), 1.0)))
         np.save(d / "line.npy", line.astype(np.float32))
-        json.dump({"box": [x0, y0, x1, y1], "size": [ow, oh], "ipd": ipd, "head_box": box, "coverage": coverage},
+        json.dump({"box": [x0, y0, x1, y1], "size": [ow, oh], "ipd": ipd, "head_box": box, "coverage": coverage,
+                   "pull": pull, "pull_steps": pull_steps, "overlap_ipd": overlap_ipd, "crop_scale": crop_scale, "strands": n_strands},
                   open(d / "meta.json", "w"))
         print(f"{name}: zone {int(zone.sum())} px, crop {x1 - x0}x{y1 - y0} -> {ow}x{oh}, "
               f"{int(tok.sum())}/{tok.size} tokens to generate")
@@ -136,7 +147,8 @@ def sample(out: Path, seeds: list[int]) -> None:
         ow, oh = meta["size"]
         for seed in seeds:
             dst = d / f"gen_{seed}.png"
-            cmd = ["/usr/bin/time", "-l", str(MFLUX_PYTHON), str(SAMPLER), str(d / "tokmask.npy"), "--prior", str(PRIOR),
+            cmd = ["/usr/bin/time", "-l", str(MFLUX_PYTHON), str(SAMPLER), str(d / "tokmask.npy"),
+                   "--prior", str(meta.get("pull", PRIOR)), "--prior-steps", str(meta.get("pull_steps", 1)),
                    "--", "--low-ram", "--model", MODEL, "--base-model", "flux2-klein-4b",
                    "--image-paths", str(d / "prefilled_crop.png"), "--prompt", PROMPT, "--steps", "4",
                    "--seed", str(seed), "--width", str(ow), "--height", str(oh), "--output", str(dst)]
@@ -185,8 +197,10 @@ def score(out: Path) -> None:
         above = (cv2.dilate(zone.astype(np.uint8), k, anchor=(0, 0)) > 0) & ~zone & (hp0 >= 0.5)
         cols = zone.any(0)
         yy = np.arange(h)[:, None]
-        seam_band = (np.abs(yy - line[None, :]) <= 3) & cols[None, :]
         inner = cv2.erode(zone.astype(np.uint8), np.ones((7, 7), np.uint8)) > 0
+        ow, oh = meta["size"]
+        zone_crop = cv2.resize(zone[y0:y1, x0:x1].astype(np.uint8), (ow, oh), interpolation=cv2.INTER_NEAREST) > 0
+        prefill_crop = np.asarray(Image.open(d / "prefilled_crop.png").convert("RGB")).astype(np.float32)
         cands = []
         for g in sorted(d.glob("gen_*.png")):
             seed = int(g.stem.split("_")[1])
@@ -203,19 +217,22 @@ def score(out: Path) -> None:
             lr = lab(res)
             de = float(np.linalg.norm(lr[new_hair].mean(0) - lab(orig)[above].mean(0))) if new_hair.sum() > 30 and above.sum() > 30 else 99.0
             gray = cv2.cvtColor(np.asarray(res), cv2.COLOR_RGB2GRAY).astype(np.float32)
-            gm = np.hypot(cv2.Sobel(gray, cv2.CV_32F, 1, 0), cv2.Sobel(gray, cv2.CV_32F, 0, 1))
-            seam = float(gm[seam_band].mean() / max(gm[above].mean(), 1e-3)) if above.any() else 9.0
-            # Strand detail: a flat hair-coloured patch (klein kept the prefill) has coverage but no
-            # strands, so compare fine detail inside the zone with his existing hair.
-            lap = np.abs(cv2.Laplacian(gray, cv2.CV_32F))
-            detail = float(lap[inner].mean() / max(lap[above].mean(), 1e-3)) if inner.any() and above.any() else 0.0
-            total = coverage / 100 - de / 50 - 0.6 * abs(np.log(max(detail, 1e-3))) - 0.1 * abs(np.log(max(seam, 1e-3)))
-            c = {"seed": seed, "coverage": round(coverage, 1), "delta_e": round(de, 1), "seam": round(seam, 2),
-                 "detail": round(detail, 2),
+            # Flat paste: klein left the prefill (nearly) as it was. Coverage and colour would call
+            # that perfect, so penalise it hard.
+            gen_crop = np.asarray(Image.open(g).convert("RGB")).astype(np.float32)
+            prefill_mae = float(np.abs(gen_crop[zone_crop] - prefill_crop[zone_crop]).mean()) if zone_crop.any() else 0.0
+            flat = prefill_mae < FLAT_PASTE_MAE
+            # High-frequency energy of new hair vs his existing hair band; natural range ~0.6-1.4.
+            hf = np.abs(gray - cv2.GaussianBlur(gray, (0, 0), 2.0))
+            hf_ratio = float(hf[inner & (hp >= 0.5)].mean() / max(hf[above].mean(), 1e-3)) if (inner & (hp >= 0.5)).sum() > 30 and above.any() else 0.0
+            hf_pen = 0.0 if 0.6 <= hf_ratio <= 1.4 else min(1.5, abs(np.log(max(hf_ratio, 1e-3) / (0.6 if hf_ratio < 0.6 else 1.4))))
+            total = coverage / 100 - de / 50 - hf_pen - (1.0 if flat else 0.0)
+            c = {"seed": seed, "coverage": round(coverage, 1), "delta_e": round(de, 1), "hf_ratio": round(hf_ratio, 2),
+                 "prefill_mae": round(prefill_mae, 1), "flat_paste": bool(flat),
                  "outside_max_change": outside, "rejected": outside != 0, "score": round(float(total), 3), **info}
             res.save(d / f"final_{seed}.png")
             cands.append(c)
-            print(f"{d.name} seed {seed}: coverage {coverage:.0f}%  dE {de:.1f}  detail {detail:.2f}  seam {seam:.2f}  "
+            print(f"{d.name} seed {seed}: coverage {coverage:.0f}%  dE {de:.1f}  hf {hf_ratio:.2f}  prefillMAE {prefill_mae:.1f}{' FLAT' if flat else ''}  "
                   f"outside {outside:.0f}  score {total:.3f}{'  REJECTED' if outside else ''}")
         ok = [c for c in cands if not c["rejected"]]
         best = max(ok, key=lambda c: c["score"]) if ok else None
@@ -238,7 +255,7 @@ def score(out: Path) -> None:
         t.paste(b2, (a.width + 10, 44))
         dr = ImageDraw.Draw(t)
         dr.text((6, 4), f"{name}  original", fill="black")
-        dr.text((a.width + 16, 4), f"best: seed {b['seed']}  coverage {b['coverage']}%  dE {b['delta_e']}  detail {b['detail']}  seam {b['seam']}", fill="black")
+        dr.text((a.width + 16, 4), f"best: seed {b['seed']}  coverage {b['coverage']}%  dE {b['delta_e']}  hf {b['hf_ratio']}", fill="black")
         dr.text((a.width + 16, 22), f"{b['seconds']} s, peak {b['peak_gb']} GB, outside change {b['outside_max_change']:.0f}", fill="black")
         tiles.append(t)
     if tiles:
@@ -258,6 +275,11 @@ def main() -> None:
     p.add_argument("photos", nargs="+", type=Path)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--coverage", type=int, default=50)
+    p.add_argument("--pull", type=float, default=PRIOR, help="pull toward the hair prefill on the first steps (0-1)")
+    p.add_argument("--pull-steps", type=int, default=1)
+    p.add_argument("--overlap-ipd", type=float, default=0.12, help="how far the mask reaches into existing hair")
+    p.add_argument("--crop-scale", type=float, default=1.0, help="<1 crops tighter, enlarging the zone more")
+    p.add_argument("--strands", type=int, default=0, help="stray strands drawn below the edge (default none)")
     s = sub.add_parser("sample")
     s.add_argument("out", type=Path)
     s.add_argument("--seeds", default="42,7,123,2024")
@@ -265,7 +287,7 @@ def main() -> None:
     c.add_argument("out", type=Path)
     args = ap.parse_args()
     if args.cmd == "prep":
-        prep(args.photos, args.out, args.coverage)
+        prep(args.photos, args.out, args.coverage, args.pull, args.pull_steps, args.overlap_ipd, args.crop_scale, args.strands)
     elif args.cmd == "sample":
         sample(args.out, [int(x) for x in args.seeds.split(",")])
     else:
