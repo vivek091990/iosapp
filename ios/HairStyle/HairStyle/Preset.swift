@@ -1,8 +1,9 @@
 import Foundation
 
 enum Preset: String, CaseIterable, Identifiable {
-    case crown = "Crown"
+    case auto = "Auto"
     case hairline = "Hairline"
+    case crown = "Crown"
     case part = "Part"
 
     var id: String { rawValue }
