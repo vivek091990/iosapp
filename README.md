@@ -71,6 +71,25 @@ python scripts/bakeoff.py ~/hairline-photos --blind
 
 It writes `bakeoff-out/<time>/index.html` with the original and each model's result side by side, a summary per model (success rate, median seconds, face drift) and 1 to 5 star ratings you can export. `--presets` defaults to `auto`. `--blind` hides model names (the key is in `results.json`) so people can rate realism without bias.
 
+### Local klein: masked inpainting (Mac)
+
+FLUX.2 klein's edit mode keeps bare skin as it is, so asked to "add hair" it barely changes the hairline. `scripts/klein_masked_inpaint.py` uses klein 4B as a masked inpainter instead:
+
+1. **Prep.** Uses the same fill zone and inpaint mask as the server (`fill_zone_mask`, `inpaint_mask`). Paints the zone in his own hair colour, with an irregular front edge and a few stray strands. Crops the head and enlarges it to about 1024 px.
+2. **Sample.** `klein_masked_sampler.py` wraps mflux. After every step it resets everything outside the mask to the photo, and on the first step only it pulls the masked area toward the prefill.
+3. **Score.** Pastes each result back (`lighting_correction` and `pyramid_blend`) and rejects any result that changes a pixel outside the mask. Scores the rest on zone coverage, colour match (ΔE) and seam, then picks the best seed.
+
+Run the three phases one after another (the sampler needs the memory: about 5.4 GB peak with `--low-ram`, about 50 s per image on an M5):
+
+```bash
+cd backend
+python scripts/klein_masked_inpaint.py prep ~/photos/IMG_0242.jpg --out out/klein
+python scripts/klein_masked_inpaint.py sample out/klein --seeds 42,7,123,2024
+python scripts/klein_masked_inpaint.py score out/klein   # writes out/klein/sheet.jpg and scores.json
+```
+
+The sample phase runs mflux's own Python (`~/.local/share/uv/tools/mflux/bin/python`, override with `MFLUX_PYTHON`) and stops if a run's peak memory goes over 8 GB.
+
 ### Training data for a self-hosted model
 
 `backend/training/` turns consented photos of people with full hairlines into training pairs for fine-tuning an open edit model (Qwen-Image-Edit or FLUX.2 klein). Pairs are made in reverse: each real photo is the "after", and a synthetic receded copy is the "before", so the model always learns toward real hair. The receding is classical image processing (M-shaped, deeper at the temples, thinned edge, forehead skin continued upward); no Gemini or other generative output is used.
