@@ -93,3 +93,22 @@ def test_local_klein_calls_mflux(monkeypatch, tmp_path):
     monkeypatch.setenv("MFLUX_EDIT_BIN", str(fake))
     out = get_provider("local-klein").edit(Image.new("RGB", (2000, 1500)), "x")
     assert out.size == (1024, 768) and out.getpixel((0, 0)) == (1, 2, 3)
+
+
+def test_pyramid_blend_keeps_outside_and_lighting_correction_removes_shift():
+    import numpy as np
+    from PIL import Image
+
+    from hairline.composite import lighting_correction, pyramid_blend
+
+    rng = np.random.default_rng(0)
+    orig = Image.fromarray((rng.random((160, 240, 3)) * 200 + 20).astype(np.uint8))
+    shifted = Image.fromarray(np.clip(np.asarray(orig).astype(int) + 40, 0, 255).astype(np.uint8))
+    alpha = np.zeros((160, 240), np.float32)
+    alpha[40:120, 80:160] = 1
+    out = np.asarray(pyramid_blend(orig, shifted, alpha))
+    assert (out != np.asarray(orig))[alpha == 0].sum() == 0
+    fixed = lighting_correction(orig, shifted, alpha, sigma=8)
+    before = np.abs(np.asarray(shifted, float) - np.asarray(orig, float))[50:110, 90:150].mean()
+    after = np.abs(np.asarray(fixed, float) - np.asarray(orig, float))[50:110, 90:150].mean()
+    assert after < 0.4 * before
